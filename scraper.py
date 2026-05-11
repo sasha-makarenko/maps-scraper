@@ -1,25 +1,51 @@
-import requests  #испортируем библиотеку
-from config import API_KEY #импортируем наш эти кей для ссылки 
+import requests
+from config import API_KEY
 
-def search_places(city, query): #делаем функцию с аргуентами 
-    url = "https://places.googleapis.com/v1/places:searchText" #задаем переменную url
+URL = "https://places.googleapis.com/v1/places:searchText"
 
-    headers  = { # делаем словарь с параметрами запроса
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": API_KEY,
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.websiteUri"
-    }
+HEADERS = {
+    "Content-Type": "application/json",
+    "X-Goog-Api-Key": API_KEY,
+    "X-Goog-FieldMask": (
+        "places.displayName,places.formattedAddress,"
+        "places.nationalPhoneNumber,places.rating,places.websiteUri"
+    )
+}
 
-    body = {
-        "textQuery": f"{query}{city}",
-        "languageCode": "uk"
-    }
+def search_places(city, query):
+    all_places = []
+    page_token = None
 
-    response = requests.post(url, headers=headers, json=body)  
-    #вызываем функцию post из библиотеки requests с 
-    #переменными которые мы задали выше
-    #она отправляет HTTP запрос к API и возвращает ответ, который мы сохраняем в переменную response.
+    while True:
+        body = {
+            "textQuery": f"{query} {city}",
+            "languageCode": "uk"
+        }
+        if page_token:
+            body["pageToken"] = page_token
 
-    data = response.json()   #задаем переменную  data и в нее передаем то что получится в response 
+        try:
+            response = requests.post(URL, headers=HEADERS, json=body, timeout=15)
+        except requests.exceptions.RequestException as e:
+            print(f"Network error: {e}")
+            break
 
-    return data #на выходе получаем json код 
+        if not response.ok:
+            print(f"API error {response.status_code}: {response.text}")
+            break
+
+        data = response.json()
+
+        if "error" in data:
+            msg = data["error"].get("message", "Unknown error")
+            print(f"API error: {msg}")
+            break
+
+        places = data.get("places", [])
+        all_places.extend(places)
+
+        page_token = data.get("nextPageToken")
+        if not page_token:
+            break
+
+    return all_places
